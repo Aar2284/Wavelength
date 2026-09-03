@@ -1,83 +1,163 @@
-# Project roadmap (internal planning doc)
+# ===========================
+# Project Planning
+# ===========================
 music_discovery_engine_roadmap.md
+music_discovery_engine_live_roadmap.md 
 
+# ===========================
 # Python
+# ===========================
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
+*.pyo
+*.pyd
 *.egg-info/
-dist/
-build/
 *.egg
 .eggs/
+dist/
+build/
+sdist/
+wheels/
+*.whl
+pip-log.txt
+pip-delete-this-directory.txt
 
-# Virtual environments
+# ===========================
+# Virtual Environments
+# ===========================
 venv/
 .venv/
 env/
 ENV/
+.python-version
 
-# Environment & secrets
+# ===========================
+# Environment & Secrets
+# ===========================
 .env
 .env.*
+*.pem
+*.key
 
-# PySpark / Spark
+# ===========================
+# PySpark / Apache Spark
+# ===========================
 metastore_db/
 derby.log
 spark-warehouse/
-*.log
 spark-logs/
+event-logs/
+spark-events/
+spark.sql.shuffle.partitions
 
-# Data files (large datasets, generated outputs)
+# ===========================
+# Data (raw datasets, generated outputs, checkpoints)
+# ===========================
 data/raw/
 data/checkpoints/
+data/streaming/
+data/events_store/
+data/catalog_store/
+data/delta_tables/
 *.parquet
 *.csv
-*.json
-!config/*.json
-!package.json
+*.tsv
+*.avro
+*.orc
 
-# Jupyter Notebooks checkpoints
+# ===========================
+# Jupyter Notebooks
+# ===========================
 .ipynb_checkpoints/
 notebooks/
 
+# ===========================
 # Scala / sbt
-scala-modules/target/
-scala-modules/project/target/
-scala-modules/project/project/
+# ===========================
+target/
+project/target/
+project/project/
+project/metals.sbt
+project/.bloop/
+.bloop/
+.metals/
 *.class
 *.jar
 *.war
+*.log
+*.tmp
 
+# ===========================
 # Delta Lake
-delta_tables/
+# ===========================
 *.delta
 
+# ===========================
 # IDE
+# ===========================
+# IntelliJ IDEA
 .idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# VS Code
 .vscode/
-*.swp
-*.swo
-*~
+*.code-workspace
+
+# Eclipse
 .project
 .classpath
 .settings/
+bin/
 
+# Neovim / Vim
+*.swp
+*.swo
+*~
+.netrwhist
+tags
+
+# ===========================
 # OS
+# ===========================
 .DS_Store
 Thumbs.db
 desktop.ini
+ehthumbs.db
+*.lnk
 
-# Results & outputs
+# ===========================
+# Results & Outputs (generated)
+# ===========================
 results/
+output/
 *.png
 *.jpg
+*.jpeg
 *.svg
+*.pdf
+*.gif
 
-# FastAPI / serving cache
-serving/cache/
-
+# ===========================
 # Logs
+# ===========================
 *.log
 logs/
+
+# ===========================
+# Docker
+# ===========================
+.docker/
+
+# ===========================
+# Misc
+# ===========================
+.cache/
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
