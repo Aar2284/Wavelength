@@ -1,0 +1,13 @@
+pyspark==3.5.1
+delta-spark==3.2.0
+kafka-python==2.0.2
+graphframes==0.6
+pandas==2.2.2
+numpy==1.26.4
+matplotlib==3.9.2
+seaborn==0.13.2
+scikit-learn==1.5.1
+fastapi==0.115.0
+uvicorn==0.30.6
+pydantic==2.9.2
+requests==2.32.3
