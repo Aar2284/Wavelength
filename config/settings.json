@@ -1,18 +1,31 @@
 {
+  "project_name": "Music Discovery Engine",
   "kafka": {
     "bootstrap_servers": "localhost:9092",
     "topics": {
       "listening_events": "listening-events",
       "catalog_releases": "catalog-releases"
-    }
+    },
+    "consumer_group": "music-engine-cg"
   },
   "spark": {
     "app_name": "MusicDiscoveryEngine",
-    "master": "local[*]"
+    "master": "local[*]",
+    "config": {
+      "spark.sql.shuffle.partitions": "200",
+      "spark.sql.streaming.checkpointLocation": "data/checkpoints",
+      "spark.python.worker.reuse": "true"
+    }
+  },
+  "paths": {
+    "raw_data": "data/raw",
+    "events_store": "data/events_store",
+    "catalog_store": "data/catalog_store",
+    "checkpoints": "data/checkpoints",
+    "results": "results"
   },
   "streaming": {
-    "checkpoint_dir": "data/checkpoints",
-    "events_store": "data/events_store",
-    "catalog_store": "data/catalog_store"
+    "event_batch_dir": "data/streaming/event_batches",
+    "catalog_batch_dir": "data/streaming/catalog_batches"
   }
 }
