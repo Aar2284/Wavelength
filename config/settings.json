@@ -1,0 +1,18 @@
+{
+  "kafka": {
+    "bootstrap_servers": "localhost:9092",
+    "topics": {
+      "listening_events": "listening-events",
+      "catalog_releases": "catalog-releases"
+    }
+  },
+  "spark": {
+    "app_name": "MusicDiscoveryEngine",
+    "master": "local[*]"
+  },
+  "streaming": {
+    "checkpoint_dir": "data/checkpoints",
+    "events_store": "data/events_store",
+    "catalog_store": "data/catalog_store"
+  }
+}
