@@ -2,7 +2,7 @@
 # Project Planning
 # ===========================
 music_discovery_engine_roadmap.md
-music_discovery_engine_live_roadmap.md 
+music_discovery_engine_live_roadmap.md
 
 # ===========================
 # Python
@@ -38,6 +38,7 @@ ENV/
 # ===========================
 .env
 .env.*
+!.env.example
 *.pem
 *.key
 
@@ -60,6 +61,7 @@ data/checkpoints/
 data/streaming/
 data/events_store/
 data/catalog_store/
+data/state/
 data/delta_tables/
 *.parquet
 *.csv

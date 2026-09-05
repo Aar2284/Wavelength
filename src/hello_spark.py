@@ -1,6 +1,8 @@
 import os
-os.environ["PYSPARK_PYTHON"] = r"C:\Users\aarya\anaconda3\python.exe"
-os.environ["PYSPARK_DRIVER_PYTHON"] = r"C:\Users\aarya\anaconda3\python.exe"
+import sys
+
+os.environ["PYSPARK_PYTHON"] = sys.executable
+os.environ["PYSPARK_DRIVER_PYTHON"] = sys.executable
 
 from pyspark.sql import SparkSession
 

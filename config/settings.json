@@ -14,7 +14,8 @@
     "config": {
       "spark.sql.shuffle.partitions": "200",
       "spark.sql.streaming.checkpointLocation": "data/checkpoints",
-      "spark.python.worker.reuse": "true"
+      "spark.python.worker.reuse": "true",
+      "spark.jars.packages": "io.graphframes:graphframes-spark4_2.13:0.12.2"
     }
   },
   "paths": {

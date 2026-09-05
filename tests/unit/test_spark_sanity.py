@@ -1,9 +1,18 @@
 import os
+import sys
 
-os.environ["PYSPARK_PYTHON"] = r"C:\Users\aarya\anaconda3\python.exe"
-os.environ["PYSPARK_DRIVER_PYTHON"] = r"C:\Users\aarya\anaconda3\python.exe"
+os.environ["PYSPARK_PYTHON"] = sys.executable
+os.environ["PYSPARK_DRIVER_PYTHON"] = sys.executable
 
+import pytest
 from pyspark.sql import SparkSession
+
+
+@pytest.fixture(scope="session")
+def spark() -> SparkSession:
+    session = get_spark_session()
+    yield session
+    session.stop()
 
 
 def get_spark_session(app_name: str = "TestSpark", master: str = "local[1]") -> SparkSession:
