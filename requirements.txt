@@ -1,7 +1,7 @@
 pyspark==4.2.0
-delta-spark==4.2.0
+delta-spark==4.4.0
+graphframes-py==0.12.2
 kafka-python==2.0.2
-graphframes==0.6
 pandas==2.2.2
 numpy==1.26.4
 matplotlib==3.9.2
@@ -11,3 +11,6 @@ fastapi==0.115.0
 uvicorn==0.30.6
 pydantic==2.9.2
 requests==2.32.3
+python-dotenv==1.2.4
+apscheduler==3.11.3
+pytest==8.4.1
