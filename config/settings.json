@@ -28,5 +28,37 @@
   "streaming": {
     "event_batch_dir": "data/streaming/event_batches",
     "catalog_batch_dir": "data/streaming/catalog_batches"
+  },
+  "lastfm": {
+    "base_url": "https://ws.audioscrobbler.com/2.0/",
+    "api_key_env": "LASTFM_API_KEY",
+    "user_list": "config/seed_users.txt",
+    "tracks_per_request": 50,
+    "method_recent_tracks": "user.getRecentTracks",
+    "method_group_members": "group.getMembers"
+  },
+  "musicbrainz": {
+    "base_url": "https://musicbrainz.org/ws/2/",
+    "user_agent_env": "MB_USER_AGENT",
+    "rate_limit_sec": 1.0,
+    "release_search_path": "release"
+  },
+  "polling": {
+    "events_interval_sec": 45,
+    "catalog_interval_sec": 300,
+    "state_dir": "data/state",
+    "state_file": "data/state/poll_state.json",
+    "source_tag": "live"
+  },
+  "bootstrap": {
+    "events_csv": "data/raw/events.csv",
+    "catalog_csv": "data/raw/catalog.csv",
+    "source_tag": "bootstrap"
+  },
+  "loadtest": {
+    "events_topic": "listening-events-loadtest",
+    "catalog_topic": "catalog-releases-loadtest",
+    "source_events_csv": "data/raw/events.csv",
+    "source_catalog_csv": "data/raw/catalog.csv"
   }
 }
