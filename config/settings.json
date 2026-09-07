@@ -35,7 +35,7 @@
     "user_list": "config/seed_users.txt",
     "tracks_per_request": 50,
     "method_recent_tracks": "user.getRecentTracks",
-    "method_group_members": "group.getMembers"
+    "method_user_info": "user.getInfo"
   },
   "musicbrainz": {
     "base_url": "https://musicbrainz.org/ws/2/",
