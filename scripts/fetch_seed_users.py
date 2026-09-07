@@ -1,0 +1,208 @@
+"""Build the seed user poll list for Wavelength.
+
+Last.fm's public API no longer exposes group membership or friend lists
+(group.getMembers removed, user.getFriends broken), so we discover users
+by validating a curated candidate pool: probe each candidate via
+user.getRecentTracks, keep accounts that exist AND have scrobbled recently.
+
+Uses a thread pool with a global rate limiter (~4 req/s, under Last.fm's
+5 req/s limit) to probe the large candidate pool quickly.
+
+Usage:
+    python -u scripts/fetch_seed_users.py [--max-days 30] [--target 100]
+
+Reads LASTFM_API_KEY from .env. Writes config/seed_users.txt.
+"""
+
+import argparse
+import os
+import sys
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timezone
+from pathlib import Path
+
+import requests
+from dotenv import load_dotenv
+
+PROJECT_ROOT = Path(__file__).parent.parent
+load_dotenv(PROJECT_ROOT / ".env")
+
+API_URL = "https://ws.audioscrobbler.com/2.0/"
+OUTPUT_FILE = PROJECT_ROOT / "config" / "seed_users.txt"
+
+# Rate limiter: max ~4 req/s aggregate (Last.fm allows 5/s)
+MIN_INTERVAL = 0.25
+_rate_lock = threading.Lock()
+_last_request = [0.0]
+
+
+def throttle() -> None:
+    with _rate_lock:
+        now = time.monotonic()
+        wait = _last_request[0] + MIN_INTERVAL - now
+        if wait > 0:
+            time.sleep(wait)
+        _last_request[0] = time.monotonic()
+
+# Curated candidate pool: common names, music handles, genre-flavored
+# handles (hip-hop & pop focused, all genres covered for diversity).
+BASE_NAMES = [
+    # common names
+    "david", "james", "sarah", "alex", "maria", "chris", "jessica",
+    "mike", "anna", "daniel", "laura", "tom", "jenny", "marc", "nina",
+    "jake", "emma", "lucas", "sofia", "ben", "lisa", "max", "kate",
+    "adam", "clara", "leo", "maya", "ryan", "zoe", "ivan", "sam",
+    "olivia", "noah", "liam", "ava", "ethan", "mia", "logan", "ella",
+    "lily", "jack", "ruby", "oscar", "hugo", "freya", "omar", "yuki",
+    # music handles
+    "vinyllover", "basshead", "stereolover", "playlistfan",
+    "scrobblerking", "mixtapeking", "turntablist", "lofibeats", "hifihead",
+    "recordclub", "cassettekid", "studioghost", "soundscaper", "waveteor",
+    # genre handles (hip-hop / pop focused, rest for diversity)
+    "hiphophead", "rapfan", "trapqueen", "barfan", "popfan", "synthpop",
+    "rockfan", "indiehead", "metalhead", "jazzcat", "soultrain",
+    "funkmaster", "edmfan", "raver", "technohead", "househead",
+    "folkrocker", "countryroads", "latinbeats", "reggaetonfan",
+    "punkrawk", "grungefan", "gospelvoice", "classicfm", "operafan",
+    # compound handles
+    "musiclover", "albumoftheday", "dailylistener", "midnightfm",
+    "morningplay", "rocknroll", "hiphopnow", "popvibes", "jazzvibes",
+    "soulvibes", "latinvibes", "indievibes", "metalvibes", "edmdrop",
+    "rapdaily", "popsongs", "rocksongs", "jazzsongs", "soulmusic",
+]
+
+# Suffix patterns applied to base names multiply the pool
+SUFFIXES = ["", "1", "2", "3", "_", "x", "7", "99", "007",
+            "music", "_music", "listens", "_fm", "42"]
+
+
+def build_candidates() -> list[str]:
+    """Expand base names/handles with common username suffixes."""
+    candidates: list[str] = []
+    seen: set[str] = set()
+    for name in BASE_NAMES:
+        for suffix in SUFFIXES:
+            candidate = f"{name}{suffix}"
+            if candidate not in seen:
+                seen.add(candidate)
+                candidates.append(candidate)
+    return candidates
+
+
+def probe_user(api_key: str, username: str, max_days: int) -> bool:
+    """Return True if the account exists and scrobbled within max_days."""
+    try:
+        throttle()
+        r = requests.get(
+            API_URL,
+            params={
+                "method": "user.getRecentTracks",
+                "user": username,
+                "api_key": api_key,
+                "limit": 5,
+                "format": "json",
+            },
+            timeout=15,
+        )
+        data = r.json()
+        if "error" in data:
+            return False
+
+        tracks = data.get("recenttracks", {}).get("track", [])
+        if isinstance(tracks, dict):
+            tracks = [tracks]
+        if not tracks:
+            return False
+
+        # Find most recent track with a timestamp; now-playing = active
+        for t in tracks:
+            date_info = t.get("date")
+            if not date_info:
+                return True  # now-playing (no date) => active now
+            uts = int(date_info.get("uts", 0))
+            age_days = (datetime.now(timezone.utc).timestamp() - uts) / 86400
+            if age_days <= max_days:
+                return True
+        return False
+    except (requests.RequestException, ValueError, KeyError):
+        return False
+
+
+def save_results(active: list[str], probed: int, max_days: int, total_pool: int) -> None:
+    header = [
+        "# Wavelength seed users - Last.fm poll list",
+        "# Generated by scripts/fetch_seed_users.py (validated via user.getRecentTracks)",
+        f"# Criteria: account exists + scrobbled within last {max_days} days",
+        f"# Total users: {len(active)}",
+        f"# Candidates probed: {probed}/{total_pool}",
+    ]
+    OUTPUT_FILE.write_text("\n".join(header + active) + "\n", encoding="utf-8")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Build seed user list by API validation")
+    parser.add_argument("--max-days", type=int, default=30,
+                        help="keep only users who scrobbled within N days (default 30)")
+    parser.add_argument("--target", type=int, default=100,
+                        help="stop after this many active users found (default 100)")
+    parser.add_argument("--workers", type=int, default=4,
+                        help="concurrent probes (default 4, rate-limited)")
+    args = parser.parse_args()
+
+    api_key = os.getenv("LASTFM_API_KEY")
+    if not api_key:
+        print("ERROR: LASTFM_API_KEY not found in .env", file=sys.stderr, flush=True)
+        return 1
+
+    candidates = build_candidates()
+    print(f"Probing {len(candidates)} candidates (target {args.target}, "
+          f"recency <= {args.max_days} days)...", flush=True)
+
+    active: list[str] = []
+    active_lock = threading.Lock()
+    probed = [0]
+    stop = threading.Event()
+    start = time.monotonic()
+
+    def worker(username: str) -> tuple[str, bool]:
+        if stop.is_set():
+            return username, False
+        return username, probe_user(api_key, username, args.max_days)
+
+    with ThreadPoolExecutor(max_workers=args.workers) as pool:
+        futures = {pool.submit(worker, u): u for u in candidates}
+        for future in as_completed(futures):
+            username, is_active = future.result()
+            probed[0] += 1
+            if is_active:
+                with active_lock:
+                    active.append(username)
+                    count = len(active)
+                print(f"[ACTIVE] {username} ({count}/{args.target})", flush=True)
+                if count >= args.target:
+                    stop.set()
+            if probed[0] % 100 == 0:
+                elapsed = time.monotonic() - start
+                print(f"... probed {probed[0]}/{len(candidates)}, "
+                      f"active={len(active)}, {elapsed:.0f}s", flush=True)
+            if stop.is_set():
+                # drain remaining futures without probing
+                for f in futures:
+                    f.cancel()
+                break
+
+    if not active:
+        print("ERROR: no active seed users found", file=sys.stderr, flush=True)
+        return 1
+
+    save_results(sorted(active), probed[0], args.max_days, len(candidates))
+    elapsed = time.monotonic() - start
+    print(f"\nWrote {len(active)} active users -> {OUTPUT_FILE.relative_to(PROJECT_ROOT)} "
+          f"({probed[0]} probed in {elapsed:.0f}s)", flush=True)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
