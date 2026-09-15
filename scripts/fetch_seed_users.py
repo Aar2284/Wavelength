@@ -46,31 +46,57 @@ def throttle() -> None:
             time.sleep(wait)
         _last_request[0] = time.monotonic()
 
-# Curated candidate pool: common names, music handles, genre-flavored
-# handles (hip-hop & pop focused, all genres covered for diversity).
+# Curated candidate pool: common names (international for diversity),
+# music handles, genre-flavored handles (hip-hop & pop focused, all
+# genres covered). Suffix expansion multiplies the pool.
 BASE_NAMES = [
-    # common names
+    # english names
     "david", "james", "sarah", "alex", "maria", "chris", "jessica",
     "mike", "anna", "daniel", "laura", "tom", "jenny", "marc", "nina",
     "jake", "emma", "lucas", "sofia", "ben", "lisa", "max", "kate",
     "adam", "clara", "leo", "maya", "ryan", "zoe", "ivan", "sam",
     "olivia", "noah", "liam", "ava", "ethan", "mia", "logan", "ella",
     "lily", "jack", "ruby", "oscar", "hugo", "freya", "omar", "yuki",
+    "tyler", "brandon", "justin", "kevin", "brian", "steve", "peter",
+    "nick", "rick", "cody", "taylor", "morgan", "casey", "jordan",
+    "jesse", "hunter", "brooke", "shannon", "misty", "crystal",
+    # spanish / portuguese names
+    "carlos", "juan", "miguel", "lucia", "diego", "valeria", "camila",
+    "elena", "pablo", "javier", "rosa", "sofi", "gabo", "nico", "pau",
+    # indian names
+    "arjun", "priya", "rahul", "ananya", "rohan", "sneha", "vikram",
+    "neha", "amit", "pooja", "karan", "diya", "aditi", "sanjay",
+    "aarav", "ishaan", "meera", "kabir", "tanvi", "rishi", "anu",
+    # other international names
+    "jean", "pierre", "luc", "claire", "kenji", "haruto", "mina",
+    "jihoon", "minjun", "wei", "nguyen", "fatima", "amina", "yusuf",
+    "ibrahim", "marco", "giulia", "luca", "tomas", "martina", "kasia",
+    "pawel", "natalia", "olga", "dmitri", "yana", "ines", "rafa",
     # music handles
     "vinyllover", "basshead", "stereolover", "playlistfan",
     "scrobblerking", "mixtapeking", "turntablist", "lofibeats", "hifihead",
     "recordclub", "cassettekid", "studioghost", "soundscaper", "waveteor",
+    "drumnbass", "grimeking", "citypop", "phonk", "shoegaze",
     # genre handles (hip-hop / pop focused, rest for diversity)
     "hiphophead", "rapfan", "trapqueen", "barfan", "popfan", "synthpop",
     "rockfan", "indiehead", "metalhead", "jazzcat", "soultrain",
     "funkmaster", "edmfan", "raver", "technohead", "househead",
     "folkrocker", "countryroads", "latinbeats", "reggaetonfan",
     "punkrawk", "grungefan", "gospelvoice", "classicfm", "operafan",
+    "drillfan", "rapaddict", "traplord", "hiphopqueen", "chartpop",
+    "kpopstan", "idolfan", "popqueen", "classicrock", "progrock",
+    "altrock", "britpop", "smoothjazz", "bebop", "swingtime",
+    "deathmetal", "powermetal", "thrashmetal", "trancefan",
+    "rnblove", "neosoul", "motown", "indiefolk", "countrygirl",
+    "bluegrass", "cumbia", "bachata", "salsalover", "bollybeats",
+    "desibeats", "pianoman", "violin", "bluesman", "afrobeats",
     # compound handles
     "musiclover", "albumoftheday", "dailylistener", "midnightfm",
     "morningplay", "rocknroll", "hiphopnow", "popvibes", "jazzvibes",
     "soulvibes", "latinvibes", "indievibes", "metalvibes", "edmdrop",
     "rapdaily", "popsongs", "rocksongs", "jazzsongs", "soulmusic",
+    "nightshift", "commuter", "studysession", "workoutmix", "chillvibes",
+    "hypevibes", "throwback", "oldiesbut", "newreleases", "deepcuts",
 ]
 
 # Suffix patterns applied to base names multiply the pool
