@@ -1,4 +1,3 @@
-import json
 import time
 import uuid
 from datetime import datetime, timezone
@@ -8,6 +7,7 @@ from kafka import KafkaConsumer, KafkaProducer
 from kafka.errors import KafkaConnectionError
 
 from src.common.config import load_config
+from src.common.serde import JsonDeserializer, JsonSerializer, Utf8StringSerializer
 
 RUN_ID = uuid.uuid4().hex
 MESSAGES_PER_TOPIC = 3
@@ -64,8 +64,8 @@ def _release_payloads() -> list[dict]:
 def _emit(bootstrap: str, topic: str, payloads: list[dict]) -> None:
     producer = KafkaProducer(
         bootstrap_servers=bootstrap,
-        key_serializer=lambda k: k.encode("utf-8"),
-        value_serializer=lambda v: json.dumps(v).encode("utf-8"),
+        key_serializer=Utf8StringSerializer(),
+        value_serializer=JsonSerializer(),
     )
     try:
         futures = [
@@ -91,7 +91,7 @@ def _roundtrip(bootstrap: str, topic: str, payloads: list[dict]) -> dict[int, di
         group_id=None,
         auto_offset_reset="earliest",
         enable_auto_commit=False,
-        value_deserializer=lambda m: json.loads(m.decode("utf-8")),
+        value_deserializer=JsonDeserializer(),
     )
     try:
         consumer.subscribe([topic])
