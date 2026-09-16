@@ -15,7 +15,7 @@
       "spark.sql.shuffle.partitions": "200",
       "spark.sql.streaming.checkpointLocation": "data/checkpoints",
       "spark.python.worker.reuse": "true",
-      "spark.jars.packages": "io.graphframes:graphframes-spark4_2.13:0.12.2"
+        "spark.jars.packages": "io.graphframes:graphframes-spark4_2.13:0.12.2,org.apache.spark:spark-sql-kafka-0-10_2.13:4.2.0"
     }
   },
   "paths": {
