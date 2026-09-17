@@ -5,8 +5,9 @@
 >
 > **Primary syllabus target:** INT315 Unit I and **CO1** — *analyse the
 > similarities and differences between Spark and Hadoop.* Section 5 is the
-> CO1 artifact. Sections 6 and 8 carry CO3 (in-memory RDD + shared variables)
-> and CO5 (workflow analysis).
+> CO1 artifact. Section 6 carries CO3 (in-memory RDD + shared variables) and
+> Sections 2, 3 and 8 carry CO5 (workflow analysis). Section 10 maps every
+> syllabus item to its section.
 
 ---
 
@@ -117,9 +118,10 @@ independent choice.
 FastAPI, **read-only**, stateless, serving precomputed Parquet/JSON.
 
 *Hard rule:* the API process never constructs a `SparkSession`. Starting
-Spark costs seconds-to-minutes and megabytes of heap per request; every
-response must be answerable from a file written by an earlier batch job.
-Statelessness also means the API can be killed and restarted with zero loss.
+Spark costs seconds-to-minutes and hundreds of megabytes to gigabytes of heap
+per request; every response must be answerable from a file written by an
+earlier batch job. Statelessness also means the API can be killed and
+restarted with zero loss.
 
 ---
 
@@ -240,11 +242,13 @@ YARN underneath. Calling them mutually exclusive is incorrect.
 
 ### 5.5 Note on published performance figures
 
-Apache Spark's documentation and the original RDD paper (Zaharia et al.)
-report speedups on the order of **10× for general workloads and up to ~100×
-for iterative, in-memory workloads** relative to Hadoop MapReduce. Those are
-**third-party published claims, not our measurements**, and they depend
-entirely on fitting the workload into memory.
+Apache Spark's documentation and the original RDD paper — Zaharia et al.,
+*Resilient Distributed Datasets: A Fault-Tolerant Abstraction for In-Memory
+Cluster Computing*, NSDI 2012 — report speedups on the order of **10× for
+general workloads and up to ~100× for iterative, in-memory workloads**
+relative to Hadoop MapReduce. Those are **third-party published claims, not
+our measurements**, and they depend entirely on fitting the workload into
+memory.
 
 This project does not repeat them as results. Phase 2.9 instead times the
 *same* aggregation implemented as an RDD and as a DataFrame at three data
