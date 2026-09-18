@@ -123,6 +123,108 @@ per request; every response must be answerable from a file written by an
 earlier batch job. Statelessness also means the API can be killed and
 restarted with zero loss.
 
+### 2.8 Detailed data flow
+
+Expanded from the README overview: seven stages, both topics, the state and
+checkpoint directories, the CO3 shared variables, and the deliberately
+separate load-test lane.
+
+```text
++------------------------------------------------------------------------------+
+| STAGE 1 - SOURCES                                                            |
++----------------------------------+-------------------------------------------+
+| Last.fm  ws.audioscrobbler.com   |  MusicBrainz  musicbrainz.org             |
+| method: user.getRecentTracks     |  path: /ws/2/release                      |
+| scope : 80 validated accounts    |  etiquette: 1 req/s + descriptive UA      |
++-----------------+----------------+--------------------+----------------------+
+                  |                 |                    |
+                  | JSON            |                    | JSON
+                  v                 |                    v
++------------------------------------------------------------------------------+
+| STAGE 2 - POLLERS   src/pollers/   (APScheduler)                             |
++----------------------------------+-------------------------------------------+
+| events_poller.py   every 45 s     |  catalog_poller.py   every 300 s         |
+| + state.py cursor store           |  release feed is already "since last",   |
+|   data/state/poll_state.json      |  so no cursor is required                |
+|   username -> last_seen_ts        |                                          |
+|   on disk: a restart must not     |                                          |
+|   lose it or history replays      |                                          |
++-----------------+----------------+--------------------+----------------------+
+                  |                 |                    |
+                  v                 |                    v
++------------------------------------------------------------------------------+
+| STAGE 3 - KAFKA   docker-compose   KRaft mode (no ZooKeeper)                 |
++----------------------------------+-------------------------------------------+
+| topic listening-events            |  topic catalog-releases                  |
+| 2 partitions - replication factor |  2 partitions - replication factor 1     |
+|           1                       |                                          |
++-----------------+----------------+--------------------+----------------------+
+                  |                 |                    |
+                  v                 |                    v
++------------------------------------------------------------------------------+
+| STAGE 4 - SPARK STRUCTURED STREAMING   src/ingestion/                        |
++----------------------------------+-------------------------------------------+
+| events_stream.py                 |  catalog_stream.py                        |
+| 1 schema validation               | 1 schema validation                      |
+| 2 withWatermark(eventTime, 30m)   | 2 foreachBatch -> Delta MERGE INTO       |
+| 3 dedup (userId,songId,timestamp) |    on songId                             |
+| 4 broadcast join <- catalog [CO3] | 3 upsert -> data/catalog_store/          |
+| 5 accumulator: malformed    [CO3] |                                          |
+| 6 append -> data/events_store/    |                                          |
+|    Parquet partitioned by date    |                                          |
+| 7 checkpoint data/checkpoints/    |                                          |
+|    events                         |                                          |
++-----------------+----------------+--------------------+----------------------+
+                  |                 |                    |
+                  v                 |                    v
++------------------------------------------------------------------------------+
+| STAGE 5 - BATCH JOBS   periodic, over the Parquet / Delta tables             |
++-----------------+----------------+------------------+------------------------+
+| sql_analytics/  | graph_analysis/|  ml/             |  scala-modules/        |
+| temp views      | GraphFrames    |  ALS             |  RDD vs DataFrame      |
+| window functions| PageRank       |  4 classifiers   |  native GraphX         |
+| joins/wildcards | Label Prop.    |  K-Means         |  benchmark             |
+| [P2 - Unit IV]  | bridge songs   |  regression      |  [P3 - CO2]            |
+|                 | [CO6]          |  [P1 - Unit VI]  |                        |
++-----------------+----------------+------------------+------------------------+
+                  |                 |                    |
+                  v                 v                    v
++------------------------------------------------------------------------------+
+| results/ (metrics, plots, benchmarks)   ->   report/ (narrative + appendix)  |
++----------------------------------+-------------------------------------------+
+                  ^                |
+                  |                v
++------------------------------------------------------------------------------+
+| STAGE 6 - SERVING   src/serving/   FastAPI, read-only, stateless             |
++------------------------------------------------------------------------------+
+| HARD RULE: never constructs a SparkSession - reads only precomputed files    |
+| /recommendations/{userId}    /trending           /communities/{userId}       |
+| /search?q=                   /song/{id}/explain/{userId}   /system/status    |
+| the Stage 4 accumulator counter is surfaced at /system/status                |
++------------------------------------------------------------------------------+
+
++------------------------------------------------------------------------------+
+| SEPARATE LANE - LOAD TEST   src/loadtest/   never touches live data          |
++------------------------------------------------------------------------------+
+| loadtest_producer.py  ->  topics listening-events-loadtest                   |
+|                           catalog-releases-loadtest                          |
+| output is labelled "scalability stress test" and reported separately         |
++------------------------------------------------------------------------------+
+```
+
+Notes on the diagram:
+
+- **Two independent lanes at Stage 3.** Live traffic and load-test traffic
+  occupy different topics; no metric can ever be computed across both.
+- **State lives on disk at Stage 2** (`data/state/poll_state.json`) and
+  **checkpoints on disk at Stage 4** (`data/checkpoints/`). Both are
+  configuration, so relocating them to HDFS or S3 is a config edit (§8.3).
+- **CO3 shared variables are marked inline** — broadcast at Stage 4 step 4,
+  accumulator at Stage 4 step 5.
+- **Stage 5 and Stage 6 are strictly one-way.** Batch jobs write files;
+  FastAPI reads files. The API never reaches back into Spark (§2.7).
+- **Every arrow in Stages 1-5 carries real data.** Only Stage 7 is synthetic.
+
 ---
 
 ## 3. Batch versus real-time (Unit I)
