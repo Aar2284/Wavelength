@@ -5,6 +5,7 @@ os.environ["PYSPARK_PYTHON"] = sys.executable
 os.environ["PYSPARK_DRIVER_PYTHON"] = sys.executable
 
 import pytest
+from kafka import KafkaConsumer
 from pyspark.sql import SparkSession
 
 from src.common.config import load_config
@@ -27,6 +28,17 @@ def _ensure_hadoop_home() -> None:
         if os.path.isfile(os.path.join(candidate, "bin", "winutils.exe")):
             os.environ["HADOOP_HOME"] = candidate
             return
+
+
+@pytest.fixture(scope="module", autouse=True)
+def kafka_reachable():
+    servers = load_config()["kafka"]["bootstrap_servers"]
+    try:
+        consumer = KafkaConsumer(bootstrap_servers=servers, group_id=None)
+        consumer.topics()
+        consumer.close()
+    except Exception as exc:
+        pytest.skip(f"Kafka broker unreachable ({exc}) — run `docker compose up -d`")
 
 
 @pytest.fixture(scope="module")
