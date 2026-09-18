@@ -436,6 +436,29 @@ Two realistic targets:
 Periodic batch jobs (graph, ML, benchmark) are the natural candidates for a
 cluster; the streaming queries and FastAPI service can stay small.
 
+Concretely, a heavier periodic job moves by changing `spark.master` in
+`config/settings.json` (or the matching `spark-submit` flag) — the code does
+not change:
+
+```bash
+# what runs today — laptop, every core
+spark-submit --master 'local[*]' <job>.py
+
+# target A — classic Spark on Hadoop (Section 5.1)
+spark-submit --master yarn --deploy-mode cluster <job>.py
+
+# target B — Spark's own scheduler, no Hadoop dependency
+spark-submit --master k8s://https://<api-server>:6443 \
+  --deploy-mode cluster \
+  --conf spark.kubernetes.container.image=<spark-image> <job>.py
+```
+
+What deliberately does *not* move: the pollers (lightweight HTTP clients),
+the two streaming queries (low volume, long-lived, checkpoint-recovery is
+already proven locally) and the FastAPI service (stateless reads of files).
+Those stay on one machine until the seed list grows by orders of magnitude,
+which is growth axis 1 in Section 8.2 — not something a cluster fixes.
+
 ### 8.4 What breaks first
 
 | Failure | Consequence | Mitigation |
