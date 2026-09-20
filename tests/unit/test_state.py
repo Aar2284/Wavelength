@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from src.pollers.state import CursorStateError, CursorStore
+from src.pollers.state import CursorStateError, CursorStore, PollStateError, SeenStore
 
 
 def test_fresh_store_returns_none(tmp_path):
@@ -73,3 +73,30 @@ def test_non_integer_cursor_raises(tmp_path):
     path.write_text('{"alice": "yesterday"}', encoding="utf-8")
     with pytest.raises(CursorStateError):
         CursorStore(path)
+
+
+def test_seen_store_roundtrip_and_persistence(tmp_path):
+    path = tmp_path / "catalog_seen.json"
+    store = SeenStore(path)
+    assert "rel-1" not in store
+    assert store.record(["rel-1", "rel-2"], uts=1700000000) is True
+    assert len(store) == 2
+    assert "rel-1" in store
+
+    reloaded = SeenStore(path)
+    assert "rel-2" in reloaded
+    assert len(reloaded) == 2
+
+
+def test_seen_store_record_is_idempotent(tmp_path):
+    store = SeenStore(tmp_path / "catalog_seen.json")
+    assert store.record(["rel-1"]) is True
+    assert store.record(["rel-1"], uts=1700000001) is False
+    assert len(store) == 1
+
+
+def test_seen_store_corrupt_file_raises(tmp_path):
+    path = tmp_path / "catalog_seen.json"
+    path.write_text("[broken", encoding="utf-8")
+    with pytest.raises(PollStateError):
+        SeenStore(path)
