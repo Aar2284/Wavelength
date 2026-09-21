@@ -5,16 +5,21 @@ os.environ["PYSPARK_PYTHON"] = sys.executable
 os.environ["PYSPARK_DRIVER_PYTHON"] = sys.executable
 
 import json
+import time
 from datetime import date, datetime, timezone
+from types import SimpleNamespace
 
 import pytest
-from pyspark.sql import SparkSession
+from pyspark.sql import Row, SparkSession
 from pyspark.sql.types import BinaryType, StructField, StructType
 
 from src.ingestion.events_stream import (
     DEDUP_KEYS,
     OUTPUT_COLUMNS,
+    QUERY_NAME,
+    MalformedEventCounter,
     apply_stateful_ops,
+    attach_malformed_counter,
     parse_events,
     prepare_events,
     write_valid_partitioned,
@@ -45,6 +50,7 @@ def spark() -> SparkSession:
     )
     session.conf.set("spark.sql.session.timeZone", "UTC")
     session.conf.set("spark.sql.timestampFormat", "yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]")
+    session.conf.set("spark.sql.shuffle.partitions", "4")
     yield session
     session.stop()
 
@@ -137,3 +143,79 @@ def test_write_valid_partitioned_writes_only_valid_rows(spark, tmp_path):
     assert written.count() == 1
     assert written.collect()[0]["userId"] == "alice"
     assert (tmp_path / "date=2023-11-14").exists()
+
+
+def progress_event(name, metrics):
+    return SimpleNamespace(
+        progress=SimpleNamespace(name=name, observedMetrics=metrics)
+    )
+
+
+def test_counter_accumulates_malformed_from_progress(spark):
+    accumulator = spark.sparkContext.accumulator(0)
+    counter = MalformedEventCounter(accumulator, QUERY_NAME)
+
+    counter.onQueryProgress(
+        progress_event(QUERY_NAME, {"validation": Row(total=10, invalid=3)})
+    )
+    counter.onQueryProgress(
+        progress_event(QUERY_NAME, {"validation": Row(total=5, invalid=2)})
+    )
+
+    assert counter.value == 5
+
+
+def test_counter_ignores_other_queries_and_empty_metrics(spark):
+    accumulator = spark.sparkContext.accumulator(0)
+    counter = MalformedEventCounter(accumulator, QUERY_NAME)
+
+    counter.onQueryProgress(progress_event("some_other_query", {"validation": Row(total=9, invalid=9)}))
+    counter.onQueryProgress(progress_event(QUERY_NAME, {}))
+    counter.onQueryProgress(progress_event(QUERY_NAME, {"validation": Row(total=5, invalid=0)}))
+    counter.onQueryProgress(progress_event(QUERY_NAME, {"validation": Row(total=5, invalid=None)}))
+
+    assert counter.value == 0
+
+
+def test_stream_pipeline_counts_malformed_and_writes_valid(spark, tmp_path):
+    src = tmp_path / "src"
+    out = tmp_path / "out"
+    checkpoint = tmp_path / "checkpoint"
+    src.mkdir()
+    other = dict(VALID_PAYLOAD, userId="bob", timestamp="2023-11-14T23:00:00+00:00")
+    missing_user = {
+        "trackName": "No User",
+        "artistName": "Someone",
+        "timestamp": "2023-11-14T22:13:20+00:00",
+    }
+    lines = [
+        json.dumps(VALID_PAYLOAD),
+        "this is not json",
+        json.dumps(missing_user),
+        json.dumps(other),
+    ]
+    (src / "part1.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    counter = attach_malformed_counter(spark, QUERY_NAME)
+    raw = spark.readStream.format("text").load(str(src))
+    query = (
+        apply_stateful_ops(prepare_events(raw))
+        .writeStream.queryName(QUERY_NAME)
+        .option("checkpointLocation", str(checkpoint))
+        .foreachBatch(lambda batch_df, batch_id: write_valid_partitioned(batch_df, batch_id, str(out)))
+        .trigger(availableNow=True)
+        .start()
+    )
+    try:
+        query.awaitTermination()
+        deadline = time.monotonic() + 20
+        while counter.value < 2 and time.monotonic() < deadline:
+            time.sleep(0.2)
+        assert counter.value == 2, f"expected 2 malformed, got {counter.value}"
+
+        written = spark.read.parquet(str(out))
+        assert written.count() == 2
+        assert sorted(r["userId"] for r in written.collect()) == ["alice", "bob"]
+    finally:
+        query.stop()
+        spark.streams.removeListener(counter)
