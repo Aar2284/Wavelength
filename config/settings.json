@@ -24,6 +24,7 @@
     "raw_data": "data/raw",
     "events_store": "data/events_store",
     "catalog_store": "data/catalog_store",
+    "trending_store": "data/trending_store",
     "checkpoints": "data/checkpoints",
     "results": "results"
   },
