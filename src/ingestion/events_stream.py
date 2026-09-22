@@ -105,8 +105,8 @@ def attach_malformed_counter(spark: SparkSession, query_name=QUERY_NAME):
     return counter
 
 
-def apply_stateful_ops(events_df: DataFrame) -> DataFrame:
-    return events_df.withWatermark("eventTime", WATERMARK_DELAY).dropDuplicates(DEDUP_KEYS)
+def apply_stateful_ops(events_df: DataFrame, watermark_delay: str = WATERMARK_DELAY) -> DataFrame:
+    return events_df.withWatermark("eventTime", watermark_delay).dropDuplicates(DEDUP_KEYS)
 
 
 def write_valid_partitioned(batch_df: DataFrame, batch_id: int, output_path: str) -> None:
