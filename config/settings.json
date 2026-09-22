@@ -17,7 +17,9 @@
       "spark.sql.timestampFormat": "yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]",
       "spark.sql.streaming.checkpointLocation": "data/checkpoints",
       "spark.python.worker.reuse": "true",
-        "spark.jars.packages": "io.graphframes:graphframes-spark4_2.13:0.12.2,org.apache.spark:spark-sql-kafka-0-10_2.13:4.2.0"
+        "spark.jars.packages": "io.graphframes:graphframes-spark4_2.13:0.12.2,org.apache.spark:spark-sql-kafka-0-10_2.13:4.2.0,io.delta:delta-spark_4.2_2.13:4.4.0",
+      "spark.sql.extensions": "io.delta.sql.DeltaSparkSessionExtension",
+      "spark.sql.catalog.spark_catalog": "org.apache.spark.sql.delta.catalog.DeltaCatalog"
     }
   },
   "paths": {
