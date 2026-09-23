@@ -46,6 +46,12 @@ def artist_credit_name(artist_credit):
     return "".join(parts).strip()
 
 
+def top_tag(tags):
+    if not tags:
+        return None
+    return max(tags, key=lambda tag: tag.get("count") or 0).get("name")
+
+
 def extract_releases(payload):
     releases = []
     for release in payload.get("releases", []):
@@ -58,6 +64,7 @@ def extract_releases(payload):
                 "title": release.get("title"),
                 "artist": artist_credit_name(release.get("artist-credit")),
                 "releaseDate": release.get("date"),
+                "genre": top_tag(release.get("tags")),
             }
         )
     return releases
