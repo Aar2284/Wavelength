@@ -103,6 +103,28 @@ compression and zero operational overhead on a laptop.
 awkward and lossy. Delta gives ACID `MERGE` on exactly one table that needs
 it, without imposing Delta on the high-volume append-only event store.
 
+*Fallback if Delta cannot be resolved* (offline mirror, restricted runtime):
+replace the `MERGE` in `upsert_catalog`'s `foreachBatch` with a union of the
+incoming batch and the existing directory, `row_number()` per `releaseId`
+ranked so incoming rows win, and an overwrite of the plain-Parquet directory
+with the winning rows:
+
+```python
+window = Window.partitionBy("releaseId")
+ranked = (
+    incoming.withColumn("rank", F.lit(1))
+    .unionByName(existing.withColumn("rank", F.lit(2)))
+    .withColumn("rn", F.row_number().over(window.orderBy("rank")))
+    .filter(F.col("rn") == 1)
+    .drop("rank", "rn")
+)
+ranked.write.mode("overwrite").parquet(table_path)
+```
+
+The trade-off is a full-directory rewrite per microbatch instead of an ACID
+log commit, which is why Delta remains the primary path and the Parquet route
+is kept only as a documented emergency option.
+
 ### 2.6 Batch compute — `src/sql_analytics/`, `graph_analysis/`, `ml/`, `scala-modules/`
 
 Periodic jobs over the stored data: SQL analytics, an RDD-vs-DataFrame
