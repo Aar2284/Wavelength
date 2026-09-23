@@ -35,6 +35,10 @@ SAMPLE_PAYLOAD = {
             "title": "Alpha",
             "artist-credit": [{"name": "Solo Act"}],
             "date": "2026-11-21",
+            "tags": [
+                {"name": "electronic", "count": 1},
+                {"name": "synthpop", "count": 4},
+            ],
         },
         {
             "id": "rel-2",
@@ -114,9 +118,11 @@ def test_extract_releases_normalizes_and_skips_missing_id():
         "title": "Alpha",
         "artist": "Solo Act",
         "releaseDate": "2026-11-21",
+        "genre": "synthpop",
     }
     assert releases[1]["artist"] == "Part A & Part B"
     assert releases[1]["releaseDate"] == "2026"
+    assert releases[1]["genre"] is None
     assert releases[2]["artist"] == ""
     assert releases[2]["releaseDate"] is None
 
@@ -127,9 +133,17 @@ def test_build_release_event_matches_smoke_schema():
         "title": "Alpha",
         "artist": "Solo Act",
         "releaseDate": "2026-11-21",
+        "genre": "indie",
     }
     event = build_release_event(release)
-    assert set(event) == {"releaseId", "title", "artist", "releaseDate", "sourceTag"}
+    assert set(event) == {
+        "releaseId",
+        "title",
+        "artist",
+        "releaseDate",
+        "genre",
+        "sourceTag",
+    }
     assert event["sourceTag"] == "live"
     assert "sourceTag" not in release
 
