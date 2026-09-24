@@ -18,13 +18,14 @@ CATALOG_SCHEMA = StructType(
         StructField("title", StringType()),
         StructField("artist", StringType()),
         StructField("releaseDate", StringType()),
+        StructField("genre", StringType()),
         StructField("sourceTag", StringType()),
     ]
 )
-OUTPUT_COLUMNS = ["releaseId", "title", "artist", "releaseDate", "sourceTag"]
+OUTPUT_COLUMNS = ["releaseId", "title", "artist", "releaseDate", "genre", "sourceTag"]
 CHANGE_CONDITION = (
     "NOT (target.title <=> source.title AND target.artist <=> source.artist "
-    "AND target.releaseDate <=> source.releaseDate "
+    "AND target.releaseDate <=> source.releaseDate AND target.genre <=> source.genre "
     "AND target.sourceTag <=> source.sourceTag)"
 )
 
@@ -35,6 +36,7 @@ def parse_catalog(raw_df: DataFrame) -> DataFrame:
         F.col("payload.title").alias("title"),
         F.col("payload.artist").alias("artist"),
         F.col("payload.releaseDate").alias("releaseDate"),
+        F.col("payload.genre").alias("genre"),
         F.col("payload.sourceTag").alias("sourceTag"),
         F.col("payload.releaseId").isNotNull().alias("isValid"),
     )
