@@ -90,6 +90,30 @@ Responsibilities:
 simpler, but it makes "recent plays" artificially stale and it forfeits the
 checkpointing/recovery behaviour that Practical P4 requires us to demonstrate.
 
+**Enrichment race strategy (Phase 2.8).** The catalog is a slowly-changing
+dimension that grows while events stream past it, so two races exist:
+
+- *An event references an artist not yet in the catalog* (stream ahead of
+  the dimension). The join is a **left** join, so the event is written
+  immediately with `genre = null` — **null-fill, never hold**. Blocking or
+  retrying micro-batches against a slowly-moving dimension would stall the
+  whole query behind the watermark for data that may arrive hours later,
+  and it would require bounded state plus a "how long is long enough"
+  timer to be correct. The backfill happens where completeness actually
+  matters: batch consumers (SQL analytics, graph, ML) re-join events
+  against the *current* catalog snapshot at read time, so a null written at
+  stream time self-heals for every consumer that cares, without rewriting
+  the append-only event store.
+- *The catalog grows after the enrichment query has started.* The static
+  side of the stream-static join is re-read from Delta on **every
+  micro-batch** (verified empirically: a release upserted mid-query
+  enriched subsequent events without a restart), so new releases join in
+  from the next micro-batch onward. Snapshot freshness is per-micro-batch,
+  not per-query-start.
+
+Hold-and-retry was explicitly rejected: it trades a null that a single
+batch re-join fixes for stream stalls, state and timer complexity.
+
 ### 2.5 Storage — partitioned Parquet
 
 `data/events_store/` is append-only Parquet partitioned by date. The catalog
