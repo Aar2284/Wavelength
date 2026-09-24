@@ -14,12 +14,14 @@ from pyspark.sql import Row, SparkSession
 from pyspark.sql.types import BinaryType, StructField, StructType
 
 from src.ingestion.events_stream import (
+    CATALOG_ENRICH_SCHEMA,
     DEDUP_KEYS,
     OUTPUT_COLUMNS,
     QUERY_NAME,
     MalformedEventCounter,
     apply_stateful_ops,
     attach_malformed_counter,
+    enrich_events,
     parse_events,
     prepare_events,
     write_valid_partitioned,
@@ -64,6 +66,10 @@ def raw_df(spark: SparkSession, values):
             value = value.encode("utf-8")
         rows.append((value,))
     return spark.createDataFrame(rows, schema=RAW_SCHEMA)
+
+
+def catalog_df(spark: SparkSession, rows):
+    return spark.createDataFrame(rows, schema=CATALOG_ENRICH_SCHEMA)
 
 
 def test_parse_events_maps_valid_payload(spark):
@@ -136,7 +142,8 @@ def test_write_valid_partitioned_writes_only_valid_rows(spark, tmp_path):
         "timestamp": "2023-11-14T22:13:20+00:00",
     }
     df = parse_events(raw_df(spark, [VALID_PAYLOAD, bad]))
-    write_valid_partitioned(df, 0, str(tmp_path))
+    enriched = enrich_events(df, catalog_df(spark, []))
+    write_valid_partitioned(enriched, 0, str(tmp_path))
 
     written = spark.read.parquet(str(tmp_path))
     assert written.columns == OUTPUT_COLUMNS
@@ -177,6 +184,39 @@ def test_counter_ignores_other_queries_and_empty_metrics(spark):
     assert counter.value == 0
 
 
+def test_enrich_events_attaches_genre_and_picks_latest_release(spark):
+    events = prepare_events(raw_df(spark, [VALID_PAYLOAD]))
+    catalog = catalog_df(
+        spark,
+        [
+            ("New Artist", "indie", "2026-11-21", "rel-new"),
+            ("new artist", "synthpop", "2026-01-01", "rel-old"),
+        ],
+    )
+    row = enrich_events(events, catalog).collect()[0]
+    assert row["genre"] == "indie"
+    assert len(row["songId"]) == 16
+    assert all(c in "0123456789abcdef" for c in row["songId"])
+
+
+def test_enrich_events_null_genre_for_unknown_artist_and_stable_song_id(spark):
+    catalog = catalog_df(spark, [("New Artist", "electronic", "2026-11-21", "rel-1")])
+    variants = [
+        VALID_PAYLOAD,
+        dict(VALID_PAYLOAD, userId="bob", artistName="  NEW ARTIST ", trackName=" new song "),
+        dict(VALID_PAYLOAD, userId="carol", trackName="Different Song"),
+        dict(VALID_PAYLOAD, userId="dave", artistName="Unknown Band"),
+    ]
+    rows = enrich_events(prepare_events(raw_df(spark, variants)), catalog).collect()
+    by_user = {r["userId"]: r for r in rows}
+    assert by_user["alice"]["genre"] == "electronic"
+    assert by_user["bob"]["genre"] == "electronic"
+    assert by_user["alice"]["songId"] == by_user["bob"]["songId"]
+    assert by_user["carol"]["songId"] != by_user["alice"]["songId"]
+    assert by_user["dave"]["genre"] is None
+    assert len(by_user["dave"]["songId"]) == 16
+
+
 def test_stream_pipeline_counts_malformed_and_writes_valid(spark, tmp_path):
     src = tmp_path / "src"
     out = tmp_path / "out"
@@ -198,8 +238,9 @@ def test_stream_pipeline_counts_malformed_and_writes_valid(spark, tmp_path):
 
     counter = attach_malformed_counter(spark, QUERY_NAME)
     raw = spark.readStream.format("text").load(str(src))
+    catalog = catalog_df(spark, [("New Artist", "electronic", "2026-11-21", "rel-1")])
     query = (
-        apply_stateful_ops(prepare_events(raw))
+        enrich_events(apply_stateful_ops(prepare_events(raw)), catalog)
         .writeStream.queryName(QUERY_NAME)
         .option("checkpointLocation", str(checkpoint))
         .foreachBatch(lambda batch_df, batch_id: write_valid_partitioned(batch_df, batch_id, str(out)))
@@ -215,7 +256,10 @@ def test_stream_pipeline_counts_malformed_and_writes_valid(spark, tmp_path):
 
         written = spark.read.parquet(str(out))
         assert written.count() == 2
-        assert sorted(r["userId"] for r in written.collect()) == ["alice", "bob"]
+        rows = written.collect()
+        assert sorted(r["userId"] for r in rows) == ["alice", "bob"]
+        assert all(r["genre"] == "electronic" for r in rows)
+        assert all(r["songId"] == rows[0]["songId"] for r in rows)
     finally:
         query.stop()
         spark.streams.removeListener(counter)
