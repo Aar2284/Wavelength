@@ -17,6 +17,7 @@ from src.ingestion.catalog_stream import (
     prepare_catalog,
     upsert_catalog,
 )
+from src.ingestion.events_stream import CATALOG_ENRICH_SCHEMA, read_catalog_snapshot
 
 RAW_SCHEMA = StructType([StructField("value", BinaryType())])
 
@@ -25,6 +26,7 @@ VALID_RELEASE = {
     "title": "New Album",
     "artist": "New Artist",
     "releaseDate": "2026-11-21",
+    "genre": "synthpop",
     "sourceTag": "live",
 }
 
@@ -55,8 +57,8 @@ def raw_df(spark: SparkSession, values):
     return spark.createDataFrame(rows, schema=RAW_SCHEMA)
 
 
-def release(release_id, title):
-    return dict(VALID_RELEASE, releaseId=release_id, title=title)
+def release(release_id, title, genre="synthpop"):
+    return dict(VALID_RELEASE, releaseId=release_id, title=title, genre=genre)
 
 
 def test_parse_catalog_maps_valid_payload(spark):
@@ -65,6 +67,7 @@ def test_parse_catalog_maps_valid_payload(spark):
     assert row["title"] == "New Album"
     assert row["artist"] == "New Artist"
     assert row["releaseDate"] == "2026-11-21"
+    assert row["genre"] == "synthpop"
     assert row["sourceTag"] == "live"
 
 
@@ -82,7 +85,13 @@ def test_upsert_catalog_inserts_updates_and_absorbs_duplicates(spark, tmp_path):
     upsert_catalog(first, 0, table_path)
 
     second = prepare_catalog(
-        raw_df(spark, [release("r1", "Title One Updated"), release("r3", "Title Three")])
+        raw_df(
+            spark,
+            [
+                release("r1", "Title One Updated", genre="new-wave"),
+                release("r3", "Title Three"),
+            ],
+        )
     )
     upsert_catalog(second, 1, table_path)
     upsert_catalog(second, 2, table_path)
@@ -90,7 +99,9 @@ def test_upsert_catalog_inserts_updates_and_absorbs_duplicates(spark, tmp_path):
     rows = spark.read.format("delta").load(table_path).orderBy("releaseId").collect()
     assert [r["releaseId"] for r in rows] == ["r1", "r2", "r3"]
     assert rows[0]["title"] == "Title One Updated"
+    assert rows[0]["genre"] == "new-wave"
     assert rows[1]["title"] == "Title Two"
+    assert rows[1]["genre"] == "synthpop"
     assert rows[2]["title"] == "Title Three"
 
 
@@ -118,3 +129,16 @@ def test_catalog_stream_merges_streaming_output(spark, tmp_path):
         assert rows[0]["title"] == "Title One"
     finally:
         query.stop()
+
+
+def test_read_catalog_snapshot_returns_delta_rows_or_empty(spark, tmp_path):
+    table_path = str(tmp_path / "catalog")
+    upsert_catalog(prepare_catalog(raw_df(spark, [VALID_RELEASE])), 0, table_path)
+
+    snapshot = read_catalog_snapshot(spark, table_path)
+    assert snapshot.count() == 1
+    assert "genre" in snapshot.columns
+
+    missing = read_catalog_snapshot(spark, str(tmp_path / "missing"))
+    assert missing.count() == 0
+    assert missing.columns == list(CATALOG_ENRICH_SCHEMA.names)
