@@ -1,7 +1,7 @@
 import argparse
 from pathlib import Path
 
-from pyspark.sql import DataFrame, SparkSession
+from pyspark.sql import DataFrame, SparkSession, Window
 from pyspark.sql import functions as F
 from pyspark.sql.streaming import StreamingQueryListener
 from pyspark.sql.types import BooleanType, StringType, StructField, StructType
@@ -26,6 +26,14 @@ EVENT_SCHEMA = StructType(
 
 DEDUP_KEYS = ["userId", "artistName", "trackName", "eventTime"]
 WATERMARK_DELAY = "30 minutes"
+CATALOG_ENRICH_SCHEMA = StructType(
+    [
+        StructField("artist", StringType()),
+        StructField("genre", StringType()),
+        StructField("releaseDate", StringType()),
+        StructField("releaseId", StringType()),
+    ]
+)
 OUTPUT_COLUMNS = [
     "userId",
     "trackName",
@@ -33,6 +41,8 @@ OUTPUT_COLUMNS = [
     "eventTime",
     "nowPlaying",
     "source",
+    "songId",
+    "genre",
     "date",
 ]
 
@@ -109,6 +119,49 @@ def apply_stateful_ops(events_df: DataFrame, watermark_delay: str = WATERMARK_DE
     return events_df.withWatermark("eventTime", watermark_delay).dropDuplicates(DEDUP_KEYS)
 
 
+def enrich_events(events_df: DataFrame, catalog_df: DataFrame) -> DataFrame:
+    catalog_pick = (
+        catalog_df.withColumn("joinArtist", F.lower(F.trim(F.col("artist"))))
+        .filter(F.col("joinArtist").isNotNull())
+        .withColumn(
+            "rn",
+            F.row_number().over(
+                Window.partitionBy("joinArtist").orderBy(
+                    F.desc_nulls_last("releaseDate"), F.desc("releaseId")
+                )
+            ),
+        )
+        .filter(F.col("rn") == 1)
+        .select("joinArtist", "genre")
+    )
+    joined = (
+        events_df.withColumn("joinArtist", F.lower(F.trim(F.col("artistName"))))
+        .join(F.broadcast(catalog_pick), on="joinArtist", how="left")
+        .drop("joinArtist")
+    )
+    return joined.withColumn(
+        "songId",
+        F.substring(
+            F.sha2(
+                F.concat_ws(
+                    "\u001f",
+                    F.lower(F.trim(F.col("artistName"))),
+                    F.lower(F.trim(F.col("trackName"))),
+                ),
+                256,
+            ),
+            1,
+            16,
+        ),
+    )
+
+
+def read_catalog_snapshot(spark: SparkSession, table_path: str) -> DataFrame:
+    if (Path(table_path) / "_delta_log").exists():
+        return spark.read.format("delta").load(table_path)
+    return spark.createDataFrame([], CATALOG_ENRICH_SCHEMA)
+
+
 def write_valid_partitioned(batch_df: DataFrame, batch_id: int, output_path: str) -> None:
     (
         batch_df.filter(F.col("isValid"))
@@ -129,6 +182,7 @@ def start_query(
 ):
     output_path = output_path or str(ROOT / cfg["paths"]["events_store"])
     checkpoint_path = checkpoint_path or str(ROOT / cfg["paths"]["checkpoints"] / "events")
+    catalog_path = str(ROOT / cfg["paths"]["catalog_store"])
     counter = attach_malformed_counter(spark)
     raw = (
         spark.readStream.format("kafka")
@@ -137,9 +191,10 @@ def start_query(
         .option("startingOffsets", starting_offsets)
         .load()
     )
+    catalog_df = read_catalog_snapshot(spark, catalog_path)
+    pipeline = enrich_events(apply_stateful_ops(prepare_events(raw)), catalog_df)
     writer = (
-        apply_stateful_ops(prepare_events(raw))
-        .writeStream.queryName(QUERY_NAME)
+        pipeline.writeStream.queryName(QUERY_NAME)
         .option("checkpointLocation", checkpoint_path)
         .foreachBatch(lambda batch_df, batch_id: write_valid_partitioned(batch_df, batch_id, output_path))
     )
