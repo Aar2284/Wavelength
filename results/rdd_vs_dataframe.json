@@ -1,0 +1,29 @@
+{
+  "generated": "2026-11-24T20:12:45.860693+00:00",
+  "spark_version": "4.2.0",
+  "master": "local[*]",
+  "shuffle_partitions": "64",
+  "repeats": 3,
+  "warmups": 1,
+  "aggregation": "avg play duration + skip rate per genre",
+  "records": [
+    {
+      "rows": 10000,
+      "dataframe_seconds": 0.9124738000100479,
+      "rdd_seconds": 14.724916500039399,
+      "speedup_rdd_over_dataframe": 16.13735813551825
+    },
+    {
+      "rows": 100000,
+      "dataframe_seconds": 0.39636210002936423,
+      "rdd_seconds": 16.732537700037938,
+      "speedup_rdd_over_dataframe": 42.21528168005548
+    },
+    {
+      "rows": 1000000,
+      "dataframe_seconds": 0.8128276999923401,
+      "rdd_seconds": 20.291559399978723,
+      "speedup_rdd_over_dataframe": 24.964158332903697
+    }
+  ]
+}
