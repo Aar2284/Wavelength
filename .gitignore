@@ -136,7 +136,7 @@ ehthumbs.db
 # ===========================
 # Results & Outputs (generated)
 # ===========================
-results/
+results/*
 output/
 *.png
 *.jpg
@@ -144,6 +144,8 @@ output/
 *.svg
 *.pdf
 *.gif
+!results/rdd_vs_dataframe.png
+!results/rdd_vs_dataframe.json
 
 # ===========================
 # Logs
