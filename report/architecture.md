@@ -386,7 +386,7 @@ YARN underneath. Calling them mutually exclusive is incorrect.
   replication — see Section 8.
 - **Spill and shuffle are real.** Wide transformations shuffle across the
   network; at laptop scale this is invisible, at cluster scale it dominates
-  cost. Our benchmark (Phase 2.9) exists to measure this rather than assert it.
+  cost. Our benchmark (Section 5.6) measures this rather than asserting it.
 
 ### 5.5 Note on published performance figures
 
@@ -398,10 +398,54 @@ relative to Hadoop MapReduce. Those are **third-party published claims, not
 our measurements**, and they depend entirely on fitting the workload into
 memory.
 
-This project does not repeat them as results. Phase 2.9 instead times the
-*same* aggregation implemented as an RDD and as a DataFrame at three data
-sizes, and the report will show **our** numbers, whatever they turn out to
-be. If the result is underwhelming it gets reported as-is.
+This project does not repeat them as results. Section 5.6 instead reports
+**our own** numbers from the same aggregation implemented twice at three
+data sizes — reported exactly as measured, whatever they show.
+
+### 5.6 Our RDD-versus-DataFrame benchmark (Phase 2.9)
+
+The benchmark runs *avg play duration + skip rate per genre* — a two-metric
+group-by — implemented twice: once with the RDD API (`aggregateByKey` with
+explicit sequence and combination aggregators) and once with the DataFrame
+API (`groupBy().agg()`). Same session, same fixture, same configuration
+(Spark 4.2.0, `local[*]`, 64 shuffle partitions). The fixture is synthetic
+because live events carry no duration or skip fields; what is measured is
+the API path, not pipeline data. Median of three timed runs after one
+warm-up, at three data sizes. Source: `src/benchmarks/rdd_vs_dataframe.py`;
+raw timings in `results/rdd_vs_dataframe.json`; chart in
+`results/rdd_vs_dataframe.png`.
+
+| Rows | DataFrame | RDD | RDD ÷ DataFrame |
+|---:|---:|---:|---:|
+| 10,000 | 0.91 s | 14.72 s | 16.1× |
+| 100,000 | 0.40 s | 16.73 s | 42.2× |
+| 1,000,000 | 0.81 s | 20.29 s | 25.0× |
+
+What the numbers actually say:
+
+- **The DataFrame path is sub-second at every size.** Catalyst compiles the
+  aggregation to JVM codegen; no Python is involved in the timed path.
+- **The RDD path carries a ~15 s fixed floor that barely moves with data
+  size.** Instrumented breakdown: the Python function itself processes a
+  1,000-row partition in about 1 ms, but the worker PIDs change on *every*
+  action. PySpark cannot pool Python workers on Windows — the pooling
+  daemon (`pyspark.daemon`) is fork-based and `PythonWorkerFactory` guards
+  daemon mode with an `isWindows` check — so each action spawns fresh
+  Python processes, and process start plus socket connect-back on this
+  machine costs seconds.
+- **The growth that is visible (14.7 s → 20.3 s) is per-row Python
+  serialisation** — rows crossing the JVM↔Python boundary one tuple at a
+  time. That slope, not the floor, is the API-level difference that would
+  persist on a Linux cluster with pooled workers.
+- **Honest scope:** one laptop, `local[*]`, Windows. These numbers compare
+  API and runtime overhead, not distributed shuffle behaviour, and they are
+  not comparable to the published 10×/100× MapReduce claims in Section 5.5
+  — different baselines entirely.
+
+The underwhelming parts are reported as-is: the headline gap is inflated
+by a Windows-specific process-spawn floor, and a reader on Linux should
+expect the RDD bars to shrink substantially while the DataFrame bars stay
+flat.
 
 ---
 
@@ -513,7 +557,7 @@ which is growth axis 1 in Section 8.2 — not something a cluster fixes.
 | Streaming query killed | Possible in-flight loss | Checkpoint recovery test (Phase 6.7) proves no loss/duplication |
 | Disk fills | Parquet writes fail | Partition pruning + retention policy |
 | Too few seed accounts | Thin graph, unstable communities | Honest population-size note in the report |
-| Shuffle spill at scale | Performance collapse | The Phase 2.9 benchmark exists to surface this early |
+| Shuffle spill at scale | Performance collapse | No spill observed at benchmark sizes (Section 5.6); remains a scale risk |
 
 ---
 
@@ -541,7 +585,7 @@ Stated plainly so the report is not oversold:
 
 | Syllabus item | Section |
 |---|---|
-| CO1 — Spark vs Hadoop similarities/differences | 5.1, 5.2, 5.3 |
+| CO1 — Spark vs Hadoop similarities/differences | 5.1, 5.2, 5.3, 5.6 |
 | CO3 — in-memory RDD, shared variables | 6 |
 | CO5 — analyse workflows / processing / analysis | 2, 3, 8 |
 | Unit I — MapReduce limits, batch vs real-time, Spark features | 3, 4, 5 |
