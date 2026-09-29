@@ -48,7 +48,7 @@ def prepare_catalog(raw_df: DataFrame) -> DataFrame:
 
 def upsert_catalog(batch_df: DataFrame, batch_id: int, table_path: str) -> None:
     spark = batch_df.sparkSession
-    source = batch_df.select(*OUTPUT_COLUMNS)
+    source = batch_df.select(*OUTPUT_COLUMNS).dropDuplicates(["releaseId"])
     if not DeltaTable.isDeltaTable(spark, table_path):
         source.write.format("delta").mode("overwrite").save(table_path)
     (
