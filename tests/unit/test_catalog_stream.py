@@ -105,6 +105,23 @@ def test_upsert_catalog_inserts_updates_and_absorbs_duplicates(spark, tmp_path):
     assert rows[2]["title"] == "Title Three"
 
 
+def test_upsert_catalog_absorbs_within_batch_duplicates(spark, tmp_path):
+    table_path = str(tmp_path / "catalog")
+    batch = prepare_catalog(
+        raw_df(
+            spark,
+            [
+                release("r1", "Title One"),
+                release("r1", "Title One"),
+                release("r2", "Title Two"),
+            ],
+        )
+    )
+    upsert_catalog(batch, 0, table_path)
+    rows = spark.read.format("delta").load(table_path).orderBy("releaseId").collect()
+    assert [r["releaseId"] for r in rows] == ["r1", "r2"]
+
+
 def test_catalog_stream_merges_streaming_output(spark, tmp_path):
     src = tmp_path / "src"
     table_path = tmp_path / "catalog"
