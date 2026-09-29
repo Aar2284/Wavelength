@@ -72,7 +72,7 @@ wavelength/
 │   ├── unit/
 │   └── integration/
 ├── report/                      # architecture doc + final report
-├── notebooks/                   # exploration notebooks (gitignored)
+├── notebooks/                   # EDA snapshot notebook (deliverable tracked)
 ├── results/                     # generated metrics & plots (gitignored)
 ├── .env.example                 # credential template
 ├── .gitattributes
