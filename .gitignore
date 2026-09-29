@@ -61,6 +61,7 @@ data/raw/
 data/checkpoints/
 data/streaming/
 data/events_store/
+data/trending_store/
 data/catalog_store/
 data/state/
 data/delta_tables/
@@ -74,7 +75,8 @@ data/delta_tables/
 # Jupyter Notebooks
 # ===========================
 .ipynb_checkpoints/
-notebooks/
+notebooks/*
+!notebooks/eda_snapshots.ipynb
 
 # ===========================
 # Scala / sbt
